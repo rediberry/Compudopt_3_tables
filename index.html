@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Airtable Check-In</title>
+  <style>
+    /* Estilos generales para la página */
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #F0F8FF;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      margin: 0;
+    }
+    .container {
+      background-color: #FFFFFF;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 10px 10px rgba(0, 0, 0, 0.1);
+      width: 300px;
+      text-align: center;
+    }
+    h1 {
+      color: #333333;
+    }
+    input[type="text"], select {
+      width: calc(100% - 20px);
+      padding: 10px;
+      margin-top: 5px;
+      border: 1px solid #CCCCCC;
+      border-radius: 4px;
+    }
+    button {
+      background-color: #4CAF50;
+      color: white;
+      padding: 10px 20px;
+      margin-top: 20px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    button:hover {
+      background-color: #45A049;
+    }
+    #records-list ul {
+      list-style-type: none;
+      padding: 0;
+    }
+    #records-list li {
+      background-color: #e7f3fe;
+      border: 1px solid #cfe2f3;
+      margin-bottom: 5px;
+      padding: 10px;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Check-In de Airtable</h1>
+
+    <!-- Formulario para seleccionar una ciudad -->
+    <form id="city-form">
+      <label for="table-select">Seleccionar Ciudad</label>
+      <select name="table-select" id="table-select" required>
+        <option value="Cleveland">Cleveland</option>
+        <option value="Houston">Houston</option>
+        <option value="Dallas">Dallas</option>
+      </select>
+      <button type="submit">Seleccionar</button>
+    </form>
+
+    <!-- Mostrar la ciudad seleccionada -->
+    <div id="selected-city" style="display:none; margin-top: 20px;">
+      <h2>Ciudad seleccionada: <span id="city-name"></span></h2>
+    </div>
+
+    <!-- Formulario de búsqueda -->
+    <div id="search-container" style="display:none;">
+      <form id="search-form">
+        <label for="search-term">Buscar por Nombre o Teléfono</label>
+        <input type="text" id="search-term" name="search-term" autocomplete="off" required>
+        <button type="submit">Buscar</button>
+      </form>
+    </div>
+
+    <!-- Lista de registros encontrados -->
+    <div id="records-list" style="display:none;">
+      <h2>Seleccionar un Registro</h2>
+      <ul id="records"></ul>
+    </div>
+
+    <!-- Formulario para actualizar el registro -->
+    <div id="update-form" style="display:none;">
+      <h2>Actualizar Registro</h2>
+      <form id="checkin-form">
+        <input type="hidden" id="record-id" name="record-id">
+        <label for="ime">TMTF</label>
+        <input type="text" id="ime" name="ime" autocomplete="off" required>
+        <button type="submit">Check in</button>
+      </form>
+    </div>
+
+    <!-- Botón para reiniciar -->
+    <button id="reset-button" style="display:none;">Reiniciar</button>
+
+    <!-- Elemento para mostrar mensajes de resultado -->
+    <p id="result"></p>
+  </div>
+
+    <script>
+        // Airtable API Key y ID de la base
+        const apiKey = 'patyBOMRiwSX5QpJb.b889ddd701714b43fe9907619c49773df4279b7a964c00705ffac26df2d6ade2';  // Reemplazar con tu API Key de Airtable
+        const baseId = 'appUZtgkvy4xUKar3';  // Reemplazar con el ID de tu base
+
+        // Evento que se ejecuta cuando se selecciona una ciudad
+        document.getElementById('city-form').addEventListener('submit', function (event) {
+        event.preventDefault(); // Evita el comportamiento por defecto del formulario
+
+        // Obtiene la ciudad seleccionada
+        const selectedCity = document.getElementById('table-select').value;
+
+        // Determina el nombre de la tabla según la ciudad seleccionada
+        let tableName;
+        switch (selectedCity) {
+            case 'Cleveland':
+            tableName = 'Cleveland';
+            break;
+            case 'Houston':
+            tableName = 'Houston';
+            break;
+            case 'Dallas':
+            tableName = 'Dallas';
+            break;
+            default:
+            tableName = 'Cleveland'; // Valor por defecto
+        }
+
+        // Muestra la ciudad seleccionada y el formulario de búsqueda
+        document.getElementById('selected-city').style.display = 'block';
+        document.getElementById('city-name').textContent = selectedCity;
+        document.getElementById('search-container').style.display = 'block';
+        document.getElementById('records-list').style.display = 'none';
+        document.getElementById('update-form').style.display = 'none';
+        document.getElementById('search-term').value = ''; // Limpia el campo de búsqueda
+        });
+
+        // Evento para reiniciar la página
+        document.getElementById('reset-button').addEventListener('click', function () {
+        document.getElementById('selected-city').style.display = 'none';
+        document.getElementById('search-container').style.display = 'none';
+        document.getElementById('records-list').style.display = 'none';
+        document.getElementById('update-form').style.display = 'none';
+        });
+
+        // Evento que se ejecuta al enviar el formulario de búsqueda
+        document.getElementById('search-form').addEventListener('submit', async function (event) {
+        event.preventDefault(); // Previene el comportamiento por defecto
+        const searchTerm = document.getElementById('search-term').value.toLowerCase(); // Obtiene el término de búsqueda
+
+        try {
+            // Fórmula para buscar por nombre, teléfono o correo electrónico en Airtable
+            const formula = `OR(
+            FIND('${searchTerm}', LOWER({First Name})),
+            FIND('${searchTerm}', LOWER({Last Name})),
+            FIND('${searchTerm}', LOWER({Cellphone Number})),
+            FIND('${searchTerm}', LOWER({Email}))
+            )`;
+            const encodedFormula = encodeURIComponent(formula); // Codifica la fórmula para usarla en la URL
+
+            // Realiza la solicitud a la API de Airtable directamente para la tabla seleccionada
+            const response = await fetch(`https://api.airtable.com/v0/${baseId}/${tableName}?filterByFormula=${encodedFormula}`, {
+                headers: {
+                    'Authorization': `Bearer ${apiKey}`
+                }
+            });
+            
+            if (!response.ok) {
+            throw new Error('Failed to fetch records');
+            }
+
+            const data = await response.json();
+            if (!data.records) {
+            throw new Error('No records field in response');
+            }
+
+            const records = data.records;
+            const recordsList = document.getElementById('records');
+
+            // Si no hay registros encontrados
+            if (records.length === 0) {
+            recordsList.textContent = 'No records found for the given search term.';
+            document.getElementById('records-list').style.display = 'none';
+            } else {
+            document.getElementById('records-list').style.display = 'block';
+            recordsList.innerHTML = ''; // Limpia los resultados anteriores
+
+            // Crea la lista de registros
+            records.forEach(record => {
+                const distDate = getFormattedDate(record, 'Donation Date'); // Obtiene la fecha formateada
+                const li = document.createElement('li');
+                li.textContent = `${record.fields['Last Name']}, ${record.fields['First Name']} - ${record.fields['Cellphone Number']} (${distDate})`;
+                li.style.cursor = 'pointer';
+
+                // Evento que se ejecuta al seleccionar un registro
+                li.addEventListener('click', function () {
+                document.getElementById('record-id').value = record.id;
+                document.getElementById('update-form').style.display = 'block';
+                });
+                recordsList.appendChild(li);
+            });
+            }
+        } catch (error) {
+            console.error('Error fetching records:', error);
+            document.getElementById('result').textContent = 'Error fetching records. Please try again.';
+        }
+        });
+
+        // Función para formatear las fechas
+        function getFormattedDate(record, fieldName) {
+        let value = record.fields[fieldName] || null;
+        console.log('Raw date value for ', fieldName, ':', value); // Línea de depuración
+        if (value) {
+            const date = new Date(value);
+            const formattedDate = date.toLocaleDateString(); // Formatea la fecha
+            console.log(`Formatted date for ${fieldName}:`, formattedDate); // Línea de depuración
+            return formattedDate;
+        }
+        return 'N/A';
+        }
+
+        // Evento que se ejecuta al enviar el formulario de "Check in"
+        document.getElementById('checkin-form').addEventListener('submit', async function (event) {
+        event.preventDefault(); // Previene el comportamiento por defecto
+        const recordId = document.getElementById('record-id').value;
+        const ime = document.getElementById('ime').value;
+
+        try {
+            // Realiza la solicitud PATCH a la API de Airtable para actualizar el registro
+            const response = await fetch(`https://api.airtable.com/v0/${baseId}/${tableName}/${recordId}`, {
+            method: 'PATCH',
+            headers: {
+                'Authorization': `Bearer ${apiKey}`,
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                fields: {
+                'Final Registration': 'Checked In', // Actualiza el campo 'Final Registration'
+                'IMEI': ime,  // Actualiza el campo 'IMEI' con el valor ingresado
+                }
+            }),
+            });
+
+            if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(JSON.stringify(errorData));
+            }
+
+            const data = await response.json();
+            document.getElementById('result').textContent = 'Record updated with barcode and marked as Checked In!';
+            document.getElementById('update-form').style.display = 'none';
+        } catch (error) {
+            document.getElementById('result').textContent = `Error: ${error.message}`;
+        }
+        });
+    </script>
+
+
+</body>
+</html>
