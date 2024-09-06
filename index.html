@@ -117,6 +117,9 @@
         const apiKey = 'patyBOMRiwSX5QpJb.b889ddd701714b43fe9907619c49773df4279b7a964c00705ffac26df2d6ade2';  // Reemplazar con tu API Key de Airtable
         const baseId = 'appUZtgkvy4xUKar3';  // Reemplazar con el ID de tu base
 
+        // Variable para almacenar el nombre de la tabla seleccionada
+        let tableName = 'Cleveland'; // Valor por defecto inicializado
+
         // Evento que se ejecuta cuando se selecciona una ciudad
         document.getElementById('city-form').addEventListener('submit', function (event) {
         event.preventDefault(); // Evita el comportamiento por defecto del formulario
